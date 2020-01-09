@@ -59,7 +59,7 @@
           <el-upload
             class="avatar-uploader"
             action="http://localhost:8080/upload"
-						:before-upload="beforeAvatarUpload"
+						:before-upload="beforeMusicUpload"
 						:on-success="handleAvatarSuccess"
 						:on-error="handleAvatarError"
 						:on-remove="handleRemove"
@@ -71,6 +71,14 @@
   					<div slot="tip" class="el-upload__tip">只能上传mp3或flac文件</div>
           </el-upload>
         </el-form-item>
+				<el-form-item label="歌词" prop="lyric">
+					<el-input
+						type="textarea"
+						:rows="6"
+						placeholder="请输入内容"
+						v-model="editForm.lyric">
+					</el-input>
+				</el-form-item>
 			</el-form>
 			<div slot="footer" class="dialog-footer">
 				<el-button @click.native="editFormVisible = false">取消</el-button>
@@ -88,7 +96,7 @@
           <el-upload
             class="avatar-uploader"
             action="http://localhost:8080/upload"
-						:before-upload="beforeAvatarUpload"
+						:before-upload="beforeMusicUpload"
 						:on-success="handleAvatarSuccess"
 						:on-error="handleAvatarError"
 						multiple
@@ -99,6 +107,28 @@
   					<div slot="tip" class="el-upload__tip">只能上传mp3或flac文件</div>
           </el-upload>
         </el-form-item>
+				<el-form-item label="歌词" prop="lyric">
+					<el-input
+						type="textarea"
+						:rows="6"
+						placeholder="请输入内容"
+						v-model="addForm.lyric">
+					</el-input>
+				</el-form-item>
+				<!-- <el-form-item label="歌词文件" prop="musicUrl">
+          <el-upload
+            class="avatar-uploader"
+						action=""
+						:before-upload="beforeLyricUpload"
+						:on-error="handleAvatarError"
+						multiple
+						:limit="1"
+						:file-list="lyrics"
+						>
+						<el-button size="small" type="primary">选择歌词文件</el-button>
+  					<div slot="tip" class="el-upload__tip">txt等文本格式</div>
+          </el-upload>
+        </el-form-item> -->
 			</el-form>
 			<div slot="footer" class="dialog-footer">
 				<el-button @click.native="addFormVisible = false">取消</el-button>
@@ -113,12 +143,24 @@
 
 	export default {
 		data() {
+			var matchLyric = (rule, value, callback) => {
+				// debugger
+				let patt = /^(((\[[0-9][0-9]:[0-9][0-9]\.[0-9][0-9]\])+.*)([\n\r])*)*$/
+				if (!patt.test(value)) {
+					callback(new Error('歌词格式错误'))
+				}
+				callback()
+			};
+
 			return {
         albumId: -1,
 				filters: {
 					name: ''
 				},
 				fileList: [],
+				// lyrics: [],
+				// lyric: '',
+				// editLyric: '',
 				musicUrl:'',
         songs: [],
 				total: 0,
@@ -132,15 +174,22 @@
 				editFormRules: {
 					name: [
 						{ required: true, message: '请输入歌曲名', trigger: 'blur' }
+					],
+					lyric: [
+						{ validator: matchLyric, trigger: 'blur' }
 					]
 				},
 				editForm: {},
         
 				addFormVisible: false,
 				addLoading: false,
+
 				addFormRules: {
 					name: [
 						{ required: true, message: '请输入歌曲名', trigger: 'blur' }
+					],
+					lyric: [
+						{ validator: matchLyric, trigger: 'blur' }
 					]
 				},
 				addForm: {}
@@ -164,13 +213,30 @@
         this.$message.error(err.msg)
 			},
 			
-			beforeAvatarUpload(file) {
+			beforeMusicUpload(file) {
         const ok = file.type === 'audio/mp3' || file.type === 'audio/flac'
         if (!ok) {
-          this.$message.error('上传的音频格式只能是MP3或flac格式!');
+          this.$message.error('上传的音频格式只能是MP3或flac格式!')
         }
         return ok;
 			},
+
+			// beforeLyricUpload(file) {
+      //   if (file.type !== 'text/plain') {
+			// 		this.$message.error('文本文件只能是txt格式!')
+			// 		return false
+			// 	}
+			// 	let reader = new FileReader()
+			// 	reader.onload = function(){
+			// 		//查看文件输出内容
+			// 		console.log(this.result);
+			// 		if (!matchLyric(this.result)) {
+			// 			this.$message.error('歌词格式错误!')
+			// 		}
+					
+			// 	}
+      //   return false;
+			// },
 			
 			handleCurrentChange(val) {
 				this.page = val;
@@ -207,7 +273,8 @@
 				this.addFormVisible = true;
 				this.addForm = {
           name: '',
-          mUrl: '',
+					mUrl: '',
+					lyric: '',
 					albumId: this.albumId,
 				};
       },
@@ -265,14 +332,43 @@
       
 			//显示编辑界面
 			handleEdit: function (index, row) {
-				this.editFormVisible = true;
-				this.editForm = Object.assign({}, row);
+				this.editFormVisible = true
+				//FIXME: v-model不会响应引用的改变（浅拷贝），除非是深拷贝成员才会响应，要防止lyric为undefined，反正记住用Object.assign就会响应
+				this.editForm = Object.assign({}, row, {lyric: ''});
 				this.musicUrl = this.editForm.mUrl
 				let strs = this.musicUrl.split('/')
-				this.fileList = [{
+				// this.fileList = [{
+					this.fileList = [{
 					name: strs[strs.length - 1],
 					url: this.musicUrl,
 				}]
+				const loading = this.$loading({
+          lock: true,
+          text: 'Loading',
+          spinner: 'el-icon-loading',
+          background: 'rgba(0, 0, 0, 0.7)'
+        })
+				Api.findLyric(this.editForm.id)
+					.then(function(res) {
+						console.log(res)
+						loading.close()
+						var tmp = res.data.data.lyric
+						if (tmp == null) {
+							// this.editLyric = ''
+							this.editForm.lyric = ''
+							return
+						}
+						// debugger
+						// this.editLyric = tmp
+						this.editForm.lyric = tmp
+					}.bind(this)).catch(function(err) {
+						console.log(err)
+						this.$message({
+							message: err.message,
+							type: 'error'
+						});
+						loading.close()
+					}.bind(this))
 			},
 			
 			//编辑
@@ -288,10 +384,11 @@
 				this.$refs.editForm.validate((valid) => {
 					if (valid) {
 						this.$confirm('确认提交吗？', '提示', {}).then(() => {
-							this.editLoading = true;
+							this.editLoading = true
+							// this.editForm.lyric = this.editLyric
 							if (this.musicUrl != '')
                 this.editForm.mUrl = this.musicUrl
-							let para = Object.assign({}, this.editForm);
+							let para = Object.assign({}, this.editForm)
 							Api.updateSong(para).then(function(res) {
                 console.log(res)
                 if (res.data.code != 0) {

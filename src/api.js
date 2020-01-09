@@ -62,6 +62,11 @@ function delSongs(params) {
   return axios.post(HOST_NAME + '/song/del', params)
 }
 
+function findLyric(id) {
+  let url = HOST_NAME + '/lyric/' + id
+  return axios.get(url)
+}
+
 export default {
   getArtists,
   addArtist,
@@ -78,4 +83,5 @@ export default {
   updateSong,
   delSong,
   delSongs,
+  findLyric,
 }
